@@ -1,0 +1,19 @@
+--cabal-version: 3.10
+cabal-version: >= 1.8
+name: runGhcBWrap-core
+version: 0.1.0.0
+--license: BSD-3-Clause
+build-type: Simple
+
+library
+  hs-source-dirs: src
+  build-depends:
+      base
+    , text
+    , filepath
+    , split
+        
+  exposed-modules:
+        RunGhc.UserInput
+        RunGhc.MakeTest
+        RunGhc.LocatedModule
