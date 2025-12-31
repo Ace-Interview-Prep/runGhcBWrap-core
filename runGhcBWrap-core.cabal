@@ -12,7 +12,11 @@ library
     , text
     , filepath
     , split
-        
+    , aeson
+    , IStr
+    , scrappy-core
+    , parsec
+    , data-default        
   exposed-modules:
         RunGhc.UserInput
         RunGhc.TrivialBuilders

@@ -96,7 +96,7 @@ unsafeMkSystemModuleFromExpressionsOnly
   -> SystemModule
 unsafeMkSystemModuleFromExpressionsOnly exprs imports extensions =
   -- LocatedUserModule
-  -- $ FromSystemModuele [PathSegment "UserLibrary"]
+  -- FromSystemModuele [PathSegment "UserLibrary"]
   addExtensions extensions
   $ addImports imports 
   $ ExpressionsOnly
