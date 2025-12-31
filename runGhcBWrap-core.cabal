@@ -22,14 +22,3 @@ library
         RunGhc.Locate
         RunGhc.LocatedModule               
         RunGhc.SystemModule
-        
-             
-rw-r--r-- 1 lazylambda users 3.9K Dec 31 13:21 Executable.hs
--rw-r--r-- 1 lazylambda users 3.7K Dec 31 03:57 LocatedModule.hs
--rw-r--r-- 1 lazylambda users 2.0K Dec 31 13:19 Locate.hs
--rw-r--r-- 1 lazylambda users  13K Dec 30 23:53 MakeExe.hs
--rw-r--r-- 1 lazylambda users  478 Dec 30 23:40 MakeTest.hs
--rw-r--r-- 1 lazylambda users 4.1K Dec 31 04:00 SystemModule.hs
--rw-r--r-- 1 lazylambda users 4.3K Dec 31 13:58 TrivialBuilders.hs
--rw-r--r-- 1 lazylambda users  14K Dec 30 23:27 UserInput.hs
-
