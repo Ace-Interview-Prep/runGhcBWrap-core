@@ -1,83 +1,57 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-module LocatedModule where
+{-# LANGUAGE DeriveGeneric #-}
 
+module RunGhc.LocatedModule where
+
+import RunGhc.SystemModule
+import RunGhc.Locate
 import System.FilePath
+import Data.Aeson
+import GHC.Generics
+import qualified Data.List.Split as List
 import qualified Data.List as List
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
+localImport :: LocatedModule -> Import
+localImport mod = Import Nothing (getPathSegments mod)
 
--- HeadlessScript ==> LocatedModule 
-makeSourcePath :: FilePath -> [PathSegment] -> FilePath
-makeSourcePath baseDir segs =
-  let segs_ = T.intercalate "/" $ getPathSegment <$> segs
-  in
-    baseDir </> (T.unpack segs_)
+localQualifiedImport :: T.Text -> LocatedModule -> Import
+localQualifiedImport qname mod = Import (Just qname) (getPathSegments mod)
 
-writeExecutable :: FilePath -> Executable -> IO ()
-writeExecutable baseDir exe =
-  writeLocatedFiles baseDir $ _main exe : _library exe
+-- This is an interesting case
+-- because the result can absolutely be wrong
+-- But we want to be careful where we allow that failure
+-- sometimes we even want that failure!
+--
+-- One case we never want this failure is with a TestModule we make.
+-- User modules however can be designed to fail this way if user
+-- has been allowed to make a mistake and has
+class Locatable a where
+  locate :: [PathSegment] -> a -> LocatedModule
+-- | These instances describe the
+--   boring logistical differences between
+-- 
+--  1) A full script given
+--  2) Only a function given
+--  3) A module we create fully
+--
+--  While broad, this is the last script of including 
+--  some Haskell symbols in our end executable
+--
+-- The utility of this is that often, linking/locating is the last step we
+-- want to think of
 
-writeLocatedFiles :: FilePath -> [LocatedModule] -> IO ()
-writeLocatedFiles baseDir modules = do
-  mapM_ (writeLocatedFile baseDir) modules
-  where
-    writeLocatedFile baseDir_ = \case
-      FromLocatedScript (LocatedScript pathSegs (Script script)) -> 
-        T.writeFile (baseDir_ </> pathSegsToPath pathSegs) script
-      FromSystemModule pathSegs systemModule -> do
-        T.writeFile (baseDir </> pathSegsToPath pathSegs) $ getScript $ systemModuleToScript pathSegs systemModule
-        -- So that we can write to file
-    makeModuleDeclaration :: [PathSegment] -> Script
-    makeModuleDeclaration pathSegs = Script ("module " <> (pathSegsToModuleName pathSegs) <> " where\n")
-
-    mkImport :: Import -> T.Text
-    mkImport imp = case _import_qualifiedName imp of
-      Nothing -> "import " <> pathSegsToModuleName (_import_pathSeg imp)
-      Just qName -> "import qualified " <> pathSegsToModuleName (_import_pathSeg imp) <> " as " <> qName 
-    makeImports (Imports importList) = Script $ T.unlines $ mkImport <$> importList
-
-    fromExpressions :: Expressions -> Script
-    fromExpressions = Script . getExpressions
-
-    makeExtensions (Extensions (exts)) = Script $ 
-      "{-# LANGUAGE" <> T.intercalate ", " exts <> " #-}"
-    
-    systemModuleToScript :: [PathSegment] -> SystemModule -> Script
-    systemModuleToScript pathSegs = \case
-      ExpressionsOnly (Expressions rawSource) ->
-        makeModuleDeclaration pathSegs -- Script ("module " <> T.pack (pathSegsToModuleName pathSegs) <> " where\n")
-        <> Script rawSource
-
-      ExpressionsImportsOnly imports (Expressions rawSource) ->
-        makeModuleDeclaration pathSegs
-        <> makeImports imports
-        <> Script rawSource
-      ExpressionsImportsExtensionsOnly extensions imports (Expressions rawSource) ->
-        makeExtensions extensions
-        <> makeModuleDeclaration pathSegs
-        <> makeImports imports
-        <> Script rawSource
-        
-
-pathSegsToPath :: [PathSegment] -> FilePath
-pathSegsToPath ((PathSegment p):[]) = T.unpack p
-pathSegsToPath ((PathSegment p):ps) = T.unpack p </> pathSegsToPath ps
-
-pathSegsToModuleName :: [PathSegment] -> T.Text
-pathSegsToModuleName ((PathSegment p):[]) = p
-pathSegsToModuleName ((PathSegment p):ps) = p <> "." <> pathSegsToModuleName ps
-
-class SemigroupModule a where
-  addImports :: Imports -> a -> a
-  addExtensions :: Extensions -> a -> a
-  addFuncsDataDecls :: Expressions -> a -> a
-
-instance SemigroupModule SystemModule where
-  addImports = addImportsSystemModule
-  addExtensions = addExtensionsSystemModule
-  addFuncsDataDecls = addExpressionSource 
+instance Locatable Script where
+  locate pathSeg script =
+    FromLocatedScript $ LocatedScript pathSeg script
+instance Locatable SystemModule where
+  locate pathSeg sysMod =
+    FromSystemModule pathSeg sysMod
+instance Locatable Expressions where
+  locate pathSeg expressions =
+    FromSystemModule pathSeg $ ExpressionsOnly expressions
 
 instance SemigroupModule LocatedModule where
   addImports imports = \case
@@ -91,66 +65,12 @@ instance SemigroupModule LocatedModule where
     sys@(FromSystemModule _ _) -> addFuncsDataDecls script sys
   
 
-addExtensionsSystemModule :: Extensions -> SystemModule -> SystemModule
-addExtensionsSystemModule exts = \case
-  ExpressionsOnly expr ->
-    ExpressionsImportsExtensionsOnly exts (Imports []) expr
-  ExpressionsImportsOnly importList expr ->
-    ExpressionsImportsExtensionsOnly exts importList expr
-  ExpressionsImportsExtensionsOnly exts1 importList expr ->
-    ExpressionsImportsExtensionsOnly (exts1 <> exts) importList expr
-    
-addImportsSystemModule :: Imports -> SystemModule -> SystemModule
-addImportsSystemModule imports = \case
-  ExpressionsOnly expr ->
-    ExpressionsImportsOnly imports expr
-  ExpressionsImportsOnly importList expr ->
-    ExpressionsImportsOnly (imports <> importList) expr
-  ExpressionsImportsExtensionsOnly extensions importList expr ->
-    ExpressionsImportsExtensionsOnly extensions (imports <> importList) expr
-  
-    
-addExpressionSource :: Expressions -> SystemModule -> SystemModule
-addExpressionSource (Expressions txt2) = \case
-  ExpressionsOnly (Expressions txt1) ->
-    ExpressionsOnly (Expressions $ txt1 <> txt2)
-  ExpressionsImportsOnly importList (Expressions txt1) ->
-    ExpressionsImportsOnly importList (Expressions $ txt1 <> txt2)
-  ExpressionsImportsExtensionsOnly extensions importList (Expressions txt1) ->
-    ExpressionsImportsExtensionsOnly extensions importList (Expressions $ txt1 <> txt2)
-    
-
--- NOTE: we are going to need functionality to get from github
--- or at least from .tar.gz
-
-data Executable = Executable
-  { _main :: LocatedModule
-  , _library :: [LocatedModule]
-  }
-
-data ExecutableWithDeps = ExecutableWithDeps
-  { _exe :: Executable
-  , _packages :: [PackageName]
-  }
-
-data ExecutableWithDepsWithCommand = ExecutableWithDepsWithCommand
-  { _exeWithDeps :: ExecutableWithDeps
-  , _commandWithArgs :: [T.Text] -- default would be runghc
-  }
-
-newtype PackageName = PackageName { getPackageName :: T.Text }
-
 getPathSegments :: LocatedModule -> [PathSegment]
 getPathSegments = \case
   FromLocatedScript (LocatedScript pathSegs _) -> pathSegs
   FromSystemModule pathSegs _ -> pathSegs
 
-getTargetModule :: Executable -> [PathSegment]
-getTargetModule = getPathSegments . _main
-
-getTargetModulePath :: Executable -> FilePath
-getTargetModulePath = pathSegsToPath . getTargetModule 
-
+-- Is there value in this construct?
 data DependentLocatedModule = DependentLocatedModule
   { _locatedModule :: LocatedModule
   , _deps :: [[PathSegment]]
@@ -158,44 +78,35 @@ data DependentLocatedModule = DependentLocatedModule
 
 data LocatedModule
   = FromLocatedScript LocatedScript
+  -- ^ Nothing to process to create+write Module
+  --   but we probably still need to make it as a lib and link it
+  --   with expected targets if it is a user Module
   | FromSystemModule [PathSegment] SystemModule
+  deriving Generic
+  -- ^ Builder descriptions to create+write Module
+instance ToJSON LocatedModule
+instance FromJSON LocatedModule
 
-newtype LocatedUserModule = LocatedUserModule LocatedModule
-newtype LocatedMainModule = LocatedMainModule LocatedModule
-  
-newtype PathSegment = PathSegment { getPathSegment :: T.Text } deriving Show
 
 -- | Witness that this script has module written in
-data LocatedScript = LocatedScript [PathSegment] Script
+data LocatedScript = LocatedScript [PathSegment] Script deriving Generic
+instance ToJSON LocatedScript
+instance FromJSON LocatedScript
 
--- We locate at the latest possible step, for flexibility
---
--- NOTE that partial-modules written by the user are still
--- a SystemModule as we are the builder
-data SystemModule
-  = ExpressionsOnly Expressions
-  | ExpressionsImportsOnly Imports Expressions
-  | ExpressionsImportsExtensionsOnly Extensions Imports Expressions
-  -- todo: as Semigroup
+newtype LocatedUserModule = LocatedUserModule
+  { getLocatedUserModule :: LocatedModule }
+newtype LocatedMainModule = LocatedMainModule
+  { getLocatedMainModule :: LocatedModule }
+newtype LocatedTestModule = LocatedTestModule
+  { getLocatedTestModule :: LocatedModule }
   
-newtype Expressions = Expressions { getExpressions :: T.Text } deriving Show
-newtype Extensions = Extensions { getExtensions :: [T.Text] } deriving Show
-newtype Imports = Imports { getImports :: [Import] } deriving Show
 
-instance Semigroup Extensions where
-  Extensions a <> Extensions b = Extensions $ a <> b 
-instance Semigroup Imports where
-  Imports a <> Imports b = Imports $ a <> b
--- eg Extensions [ "OverloadededStrings" ]i
+newtype Script = Script { getScript :: T.Text } deriving (Show, Generic)
+instance ToJSON Script
+instance FromJSON Script
 instance Semigroup Script where
   Script a <> Script b = Script $ a <> b
 instance Monoid Script where
   mempty = Script mempty
 
-data Import = Import
-  { _import_qualifiedName :: Maybe T.Text
-  , _import_pathSeg :: [PathSegment]
-  } deriving Show
-
-newtype Script = Script { getScript :: T.Text } deriving Show
-
+newtype Symbol = Symbol { getSymbol :: T.Text } -- should never get a show instance
