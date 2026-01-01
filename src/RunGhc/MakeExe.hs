@@ -50,6 +50,8 @@ defaultHeadMainModule =
       ])
   )
 
+toSingleModuleExe :: LocatedModule -> Executable
+toSingleModuleExe loc = Executable loc []
 -- Cuter way to do it
 -- The symbol represents a name the script must provide
 mkTestScriptBracketed

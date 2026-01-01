@@ -32,9 +32,17 @@ runF fname userScript =
     userModule = mkUserModule' settings_ userScript
     testScript = simpleExeFromFunctionNameAsLib fname (getLocatedUserModule userModule)
     settings_ = def
-  
 runMain :: T.Text -> Either T.Text Executable
 runMain = runF "main"
+
+runMainHs :: T.Text -> Either T.Text Executable
+runMainHs = Right . toSingleModuleExe . locate [PathSegment "Main"] . Script 
+
+-- | Interesting way to do it, but we need a way for the Executable
+--   to instruct how it should be run (SAFELY!)
+-- runModuleNameHs :: T.Text -> Either T.Text Executable
+-- runModuleNameHs = Right . toSingleModuleExe . locate [PathSegment "Main"] . Script 
+
 
 withSymbols
   :: Qualifiable args
