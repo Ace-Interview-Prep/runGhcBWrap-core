@@ -83,7 +83,7 @@ userFunc x y = x + y
 |]
 
 compareFuncExample :: IO (Either T.Text Executable)
-compareFuncExample = comparePureArity1 nnScriptExample "userFunc" exampleUserScript
+compareFuncExample = comparePureArity1 nnScriptExample ("userFunc", exampleUserScript)
 
 comparePureArity1 :: NoNameScript -> (FunctionName, T.Text) -> IO (Either T.Text Executable)
 comparePureArity1 = compareFunc liftPure1
