@@ -8,15 +8,16 @@ build-type: Simple
 library
   hs-source-dirs: src
   build-depends:
-      base
-    , text
+      aeson
+    , base
+    , data-default    
     , filepath
-    , split
-    , aeson
     , IStr
-    , scrappy-core
     , parsec
-    , data-default        
+    , random
+    , scrappy-core
+    , split
+    , text
   exposed-modules:
         RunGhc.UserInput
         RunGhc.TrivialBuilders
