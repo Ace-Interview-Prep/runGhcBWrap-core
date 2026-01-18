@@ -56,10 +56,10 @@ makeSourcePath baseDir segs =
 showImportLine :: Import -> T.Text
 showImportLine imp = case _import_qualifiedName imp of
   Nothing ->
-    "import " <> pathSegsToModuleName (_import_pathSeg imp) <> "\n"
+    "import " <> pathSegsToModuleName (_import_pathSeg imp) <> ""
   Just qName ->
     "import qualified "
     <> pathSegsToModuleName (_import_pathSeg imp)
     <> " as "
     <> qName
-    <> "\n"
+    <> ""
