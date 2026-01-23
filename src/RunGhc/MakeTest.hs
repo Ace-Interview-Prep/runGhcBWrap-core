@@ -623,7 +623,7 @@ main = do
   inputs <- #{importName $ getImportName testModule}.#{testValueName} -- inputs :: (ToJSON a, FromJSON a) => a 
   valsUser <- mapM userF inputs
   valsOurSolution <- mapM solutionF inputs
-  let x = zipWith3 (\outUser expec_ inp -> TryCodeResult inp outUser expec_ (outUser == expec_))  valsUser valsOurSolution inp
+  let x = zipWith3 (\outUser expec_ inp -> TryCodeResult inp outUser expec_ (outUser == expec_))  valsUser valsOurSolution inputs
   LBS.putStrLn $ Aeson.encode x 
 |]
   
