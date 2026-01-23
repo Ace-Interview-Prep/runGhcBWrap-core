@@ -26,6 +26,7 @@ import Data.Default
 import Data.Bifunctor
 import Data.Text (Text, pack)
 import System.Random (randomRIO)
+import System.Exit
 import Data.Char (toUpper)
 
 -- new idea : standardized Main.hs that runs 2 sets of symbols
@@ -44,6 +45,34 @@ data SourceCode = SourceCode
   } deriving Generic
 instance FromJSON SourceCode
 instance ToJSON SourceCode
+
+-- The scope of our computation the user can see
+data CodeChallengeResult = CodeChallengeResult
+  { _ccrRunGhc_exitCode :: ExitCode
+  , _ccrRunGhc_stderr :: [String]
+  , _ccrRunGhc_tests :: [Bool]
+  } deriving Generic
+instance FromJSON CodeChallengeResult
+instance ToJSON CodeChallengeResult
+
+class Reduce a where
+  reduce :: a -> [Bool]
+
+instance Reduce CodeChallengeResult where
+  reduce = _ccrRunGhc_tests
+
+instance Reduce TestSolutionResult where
+  reduce tsol = fmap _success $ _testSolRunGhc_tests tsol
+
+-- The scope of our computation the user can see
+data TestSolutionResult = TestSolutionResult
+  { _testSolRunGhc_exitCode :: ExitCode
+  , _testSolRunGhc_stderr :: [String]
+  , _testSolRunGhc_tests :: [TryCodeResult T.Text T.Text]
+  } deriving Generic
+instance FromJSON TestSolutionResult
+instance ToJSON TestSolutionResult
+
 
 
 -- A neat hack to pass back the result like a typed-ffi
@@ -573,8 +602,12 @@ module Main where
 import Control.Monad (mapM)
 #{showImportLine userModule}
 #{showImportLine testModule}
+import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.Aeson as Aeson
+import RunGhc.MakeTest
 
---userF, solutionF 
+
+--userF, solutionF -- should i use the proxies to assert the types here?
 userF = #{getFnT . mkF $ importName (getImportName userModule) <> "." <> fnameUser}
 solutionF = #{getFnT . mkF $ importName (getImportName testModule) <> "." <> fnameCompare}
 
@@ -583,7 +616,8 @@ main = do
   inputs <- #{importName $ getImportName testModule}.#{testValueName} -- inputs :: (ToJSON a, FromJSON a) => a 
   valsUser <- mapM userF inputs
   valsOurSolution <- mapM solutionF inputs
-  print $ zipWith (==) valsUser valsOurSolution
+  let x = zipWith3 (\outUser expec_ inp -> TryCodeResult inp outUser expec_ (outUser == expec_))  valsUser valsOurSolution inp
+  LBS.putStrLn $ Aeson.encode x 
 |]
   
 newtype ImportName = ImportName { importName :: T.Text }
@@ -1099,3 +1133,5 @@ renderGenerator = \case
   Unfoldr -> "[]"
 
   
+instance ToJSON ExitCode
+instance FromJSON ExitCode
