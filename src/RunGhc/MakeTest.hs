@@ -86,6 +86,13 @@ data TryCodeResult a b = TryCodeResult
   , _success :: Bool
   } deriving Generic
 
+instance Functor (TryCodeResult a) where
+  fmap f tryCodeResult = TryCodeResult
+    (_input tryCodeResult)
+    (f $ _output tryCodeResult)
+    (f $ _expectedOutput tryCodeResult)
+    (_success tryCodeResult)
+
 instance Bifunctor TryCodeResult where
   bimap f g (TryCodeResult inp out expected success) = 
     TryCodeResult (f inp) (g out) (g expected) success
